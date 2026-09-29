@@ -16,7 +16,8 @@ const BARRA           = 40;
 const TAMANIO_INICIAL = 22;
 const BOOST_SPEED     = 18;
 const FRICCION        = 0.88;
-const MERGE_COOLDOWN  = 4000;   // ms tras dividirse antes de poder fusionarse
+const MERGE_COOLDOWN  = 10000;  // 10s tras dividirse antes de poder fusionarse
+const MAX_PUNTOS      = 2000;   // El primero solo puede llegar a 2000 puntos
 
 const COLORES = [
     '#ff4757','#ff6b81','#ffa502','#eccc68',
@@ -28,7 +29,21 @@ const COLORES = [
 
 // ── Arrays de entidades ───────────────────────────────────────────────────────
 const puntos  = [];
-const celulas = [];   // { el, numEl, x, y, diameter, vx, vy, mergeAt }
+const celulas = [];   // células del jugador
+const bots    = [];   // bots IA
+
+// ── Constantes de bots ───────────────────────────────────────────────────────
+const BOT_LIMIT  = 20;
+const BOT_SPEED  = 0.9;   // px/frame
+// Quien tenga mayor puntuación come al de menor puntuación (ej: 32 come a 31)
+let _botIdCounter = 0;
+
+const BOT_COLORES = [
+    '#2ed573','#1e90ff','#ffa502','#5352ed','#00d2d3',
+    '#ff9f43','#6ab04c','#9980FA','#F9CA24','#ee5a24',
+    '#0652DD','#833471','#006266','#eccc68','#70a1ff',
+    '#ff6348','#7bed9f','#ff6b81','#a29bfe','#fdcb6e',
+];
 
 // ── Puntos de comida ──────────────────────────────────────────────────────────
 function crearPunto() {
@@ -45,14 +60,9 @@ function crearPunto() {
 function generarPuntos(n) { for (let i = 0; i < n; i++) puntos.push(crearPunto()); }
 
 // ── Células del jugador ───────────────────────────────────────────────────────
-// ID único por célula para trackear contacto entre pares
+// ID único por célula
 let _celulaIdCounter = 0;
 
-// Map de pares tocándose → timestamp de inicio del contacto
-// Clave: 'id_a-id_b' (siempre a < b). Valor: Date.now() cuando empezaron a tocarse
-const touchingMap = new Map();
-
-const TOUCH_MERGE_MS = 10000; // ms que deben estar tocándose para fusionarse
 
 function crearCelula(x, y, diameter, vx, vy, mergeAt, cellScore) {
     vx        = vx        || 0;
@@ -104,6 +114,7 @@ window.onload = () => {
     });
 
     generarPuntos(TOTAL_PUNTOS);
+    generarBots();
 
     // Iniciamos el loop DENTRO de onload para asegurar que el DOM está listo
     animate();
@@ -178,10 +189,12 @@ function checkColisiones() {
                 setTimeout(() => ref.remove(), 150);
                 puntos.splice(i, 1);
 
-                c.cellScore++;
-                updateCellScore(c);
-                setCelulaDiameter(c, c.diameter + 0.4);
-                velocidad = Math.max(0.3, velocidad - 0.001);
+                if (c.cellScore < MAX_PUNTOS) {
+                    c.cellScore++;
+                    updateCellScore(c);
+                    setCelulaDiameter(c, c.diameter + 0.4);
+                    velocidad = Math.max(0.3, velocidad - 0.001);
+                }
                 puntos.push(crearPunto());
             }
         }
@@ -190,15 +203,14 @@ function checkColisiones() {
 
 // ── Fusión de células ─────────────────────────────────────────────────────────
 function checkFusiones() {
-    const now     = Date.now();
-    const tocando = new Set(); // claves de pares que se están tocando este frame
+    const now = Date.now();
 
     for (let i = 0; i < celulas.length; i++) {
         for (let j = celulas.length - 1; j > i; j--) {
             const a = celulas[i];
             const b = celulas[j];
 
-            // Ambas deben haber superado el cooldown de split
+            // Fusión a los 10 segundos tras dividirse (sin necesidad de tocarse antes)
             if (now < a.mergeAt || now < b.mergeAt) continue;
 
             const dx   = a.x - b.x;
@@ -207,35 +219,25 @@ function checkFusiones() {
             const ra   = a.diameter / 2;
             const rb   = b.diameter / 2;
 
-            // Clave única para este par (siempre menor id primero)
-            const key = a.id < b.id ? `${a.id}-${b.id}` : `${b.id}-${a.id}`;
+            // Al cumplirse los 10s, atracción hacia la célula para venir a tocarse al final
+            const attract = 2.0;
+            if (dist > 1) {
+                b.x += (dx / dist) * attract;
+                b.y += (dy / dist) * attract;
+            }
 
+            // Solo se tocan al final para fusionarse inmediatamente
             if (dist < ra + rb) {
-                // Se están tocando este frame
-                tocando.add(key);
+                const newDiam = Math.sqrt(a.diameter * a.diameter + b.diameter * b.diameter);
+                setCelulaDiameter(a, newDiam);
+                a.cellScore = Math.min(MAX_PUNTOS, a.cellScore + b.cellScore);
+                updateCellScore(a);
+                a.mergeAt = 0;
 
-                if (!touchingMap.has(key)) {
-                    // Primera vez que se tocan → guardar timestamp
-                    touchingMap.set(key, now);
-                } else if (now - touchingMap.get(key) >= TOUCH_MERGE_MS) {
-                    // Llevan 10 s tocándose → fusionar
-                    const newDiam = Math.sqrt(a.diameter * a.diameter + b.diameter * b.diameter);
-                    setCelulaDiameter(a, newDiam);
-                    a.cellScore += b.cellScore;
-                    updateCellScore(a);
-                    a.mergeAt = 0;
-
-                    touchingMap.delete(key);
-                    b.el.remove();
-                    celulas.splice(j, 1);
-                }
+                b.el.remove();
+                celulas.splice(j, 1);
             }
         }
-    }
-
-    // Limpiar pares que ya no se están tocando → resetear su contador
-    for (const key of touchingMap.keys()) {
-        if (!tocando.has(key)) touchingMap.delete(key);
     }
 }
 
@@ -326,43 +328,518 @@ function animate() {
 
     cuadrado.style.cursor = anyOver ? 'none' : 'crosshair';
 
-    // Separación física: las células no pueden solaparse
+    // Separación física (solo durante los primeros 10s tras dividirse)
     separateCells();
+    separateBotCells();
 
     checkColisiones();
+    updateBots();
+    checkComidasBots();
     checkFusiones();
+    checkFusionesBots();
+    checkBotRespawn();
     updateMinimapa();
+    updateLeaderboard();
 
     requestAnimationFrame(animate);
 }
 
-// ── Separación física entre células ──────────────────────────────────────────
-// Empuja las células que se solapan hasta que se toquen en el borde (sin penetración)
+// ── Separación física entre células del jugador ──────────────────────────────
 function separateCells() {
+    const now = Date.now();
     for (let i = 0; i < celulas.length; i++) {
         for (let j = i + 1; j < celulas.length; j++) {
             const a  = celulas[i];
             const b  = celulas[j];
+            // Si ya pasaron los 10 segundos, no se repelen para permitir tocarse al final y fusionarse
+            if (now >= a.mergeAt && now >= b.mergeAt) continue;
+
             const ra = a.diameter / 2;
             const rb = b.diameter / 2;
-
             const dx   = b.x - a.x;
             const dy   = b.y - a.y;
             const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
             const minDist = ra + rb;
-
             if (dist < minDist) {
-                // Cuánto se solapan
-                const overlap = minDist - dist;
-                // Dirección de separación (normalizada)
-                const nx = dx / dist;
-                const ny = dy / dist;
-                // Cada una se mueve la mitad del solapamiento
-                const push = overlap / 2;
-                a.x -= nx * push;
-                a.y -= ny * push;
-                b.x += nx * push;
-                b.y += ny * push;
+                const push = (minDist - dist) / 2;
+                const nx = dx / dist, ny = dy / dist;
+                a.x -= nx * push; a.y -= ny * push;
+                b.x += nx * push; b.y += ny * push;
+            }
+        }
+    }
+}
+
+// ── Separación física entre células del mismo bot ────────────────────────────
+function separateBotCells() {
+    const now = Date.now();
+    for (let i = 0; i < bots.length; i++) {
+        for (let j = i + 1; j < bots.length; j++) {
+            const a = bots[i];
+            const b = bots[j];
+            if (a.botId !== b.botId) continue;
+            // Si ya pasaron los 10 segundos, no repeler para que puedan tocarse y fusionarse
+            if (now >= a.mergeAt && now >= b.mergeAt) continue;
+
+            const ra = a.diameter / 2;
+            const rb = b.diameter / 2;
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
+            const minDist = ra + rb;
+            if (dist < minDist) {
+                const push = (minDist - dist) / 2;
+                const nx = dx / dist, ny = dy / dist;
+                a.x -= nx * push; a.y -= ny * push;
+                b.x += nx * push; b.y += ny * push;
+            }
+        }
+    }
+}
+
+// ── BOTS IA ──────────────────────────────────────────────────────────────────
+function crearBot(x, y, diameter, cellScore, color, botId) {
+    if (botId === undefined) {
+        botId = _botIdCounter++;
+    }
+    diameter  = diameter  || TAMANIO_INICIAL;
+    cellScore = cellScore || 0;
+    color     = color || BOT_COLORES[Math.floor(Math.random() * BOT_COLORES.length)];
+
+    const el = document.createElement('div');
+    el.className = 'celula';
+    el.style.backgroundColor = color;
+    el.style.boxShadow = `0 0 8px ${color}99`;
+    el.style.width  = diameter + 'px';
+    el.style.height = diameter + 'px';
+    el.style.left   = x + 'px';
+    el.style.top    = y + 'px';
+
+    const numEl = document.createElement('span');
+    numEl.className = 'cell-numero';
+    numEl.textContent = cellScore;
+    el.appendChild(numEl);
+
+    cuadrado.appendChild(el);
+    return {
+        el, numEl, x, y,
+        diameter, cellScore, color, botId,
+        vx: 0, vy: 0,
+        tx: x, ty: y, wanderTimer: 0,
+        mergeAt: 0, splitCooldown: 0,
+        id: _celulaIdCounter++
+    };
+}
+
+function generarBots() {
+    const W = cuadrado.offsetWidth, H = cuadrado.offsetHeight;
+    for (let i = 0; i < BOT_LIMIT; i++) {
+        const x = Math.random() * (W - 80) + 40;
+        const y = Math.random() * (H - 80) + 40;
+        bots.push(crearBot(x, y));
+    }
+}
+
+function getDistinctBotCount() {
+    const ids = new Set();
+    for (const b of bots) ids.add(b.botId);
+    return ids.size;
+}
+
+let botRespawnPending = false;
+function checkBotRespawn() {
+    const distinctCount = getDistinctBotCount();
+    // Cuando llegue a menos de 20 vuelven a aparecer, con límite estricto de 20
+    if (distinctCount < BOT_LIMIT && !botRespawnPending) {
+        botRespawnPending = true;
+        setTimeout(() => {
+            botRespawnPending = false;
+            const W = cuadrado.offsetWidth, H = cuadrado.offsetHeight;
+            while (getDistinctBotCount() < BOT_LIMIT) {
+                const x = Math.random() * (W - 80) + 40;
+                const y = Math.random() * (H - 80) + 40;
+                bots.push(crearBot(x, y));
+            }
+        }, 1200);
+    }
+}
+
+// Si te comen, apareces en cualquier lado del mapa
+function respawnJugador() {
+    const W = cuadrado.offsetWidth  || 3000;
+    const H = cuadrado.offsetHeight || 3000;
+
+    let rx = W / 2, ry = H / 2;
+    for (let attempts = 0; attempts < 25; attempts++) {
+        rx = Math.random() * (W - BARRA * 2 - 200) + BARRA + 100;
+        ry = Math.random() * (H - BARRA * 2 - 200) + BARRA + 100;
+        let safe = true;
+        for (const b of bots) {
+            if (Math.hypot(b.x - rx, b.y - ry) < b.diameter + 100) {
+                safe = false;
+                break;
+            }
+        }
+        if (safe) break;
+    }
+
+    velocidad = 1.2;
+
+    const nueva = crearCelula(rx, ry, TAMANIO_INICIAL, 0, 0, 0, 0);
+    celulas.push(nueva);
+
+    centrarCamara();
+}
+
+function checkFusionesBots() {
+    const now = Date.now();
+    for (let i = 0; i < bots.length; i++) {
+        for (let j = bots.length - 1; j > i; j--) {
+            if (i >= bots.length || j >= bots.length) continue;
+            const a = bots[i];
+            const b = bots[j];
+            if (a.botId !== b.botId) continue;
+            if (now < a.mergeAt || now < b.mergeAt) continue;
+
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const ra = a.diameter / 2;
+            const rb = b.diameter / 2;
+
+            // Al cumplirse los 10s, atracción mutua para que vengan a tocarse
+            const attract = 1.8;
+            if (dist > 1) {
+                b.x += (dx / dist) * attract;
+                b.y += (dy / dist) * attract;
+            }
+
+            // Solo se tocan al final para fusionarse al instante
+            if (dist < ra + rb) {
+                const newDiam = Math.sqrt(a.diameter * a.diameter + b.diameter * b.diameter);
+                setBotDiameter(a, newDiam);
+                a.cellScore = Math.min(MAX_PUNTOS, a.cellScore + b.cellScore);
+                a.numEl.textContent = a.cellScore;
+                a.mergeAt = 0;
+
+                b.el.remove();
+                bots.splice(j, 1);
+            }
+        }
+    }
+}
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+const lbList = document.getElementById('lb-list');
+let lbFrameCount = 0;
+
+function updateLeaderboard() {
+    if (!lbList) return;
+    lbFrameCount++;
+    if (lbFrameCount % 15 !== 0) return; // actualizar periódicamente para rendimiento
+
+    const data = [];
+
+    // Jugador (suma de todas sus células)
+    let pScore = 0;
+    for (const c of celulas) pScore += c.cellScore;
+    if (celulas.length > 0) {
+        data.push({ name: 'Tú', score: Math.min(MAX_PUNTOS, pScore), isPlayer: true });
+    }
+
+    // Bots (suma por botId)
+    const botMap = new Map();
+    for (const b of bots) {
+        const cur = botMap.get(b.botId) || 0;
+        botMap.set(b.botId, Math.min(MAX_PUNTOS, cur + b.cellScore));
+    }
+    for (const [botId, score] of botMap.entries()) {
+        data.push({ name: `Bot #${botId + 1}`, score, isPlayer: false });
+    }
+
+    // Ordenar de mayor a menor (el primero arriba)
+    data.sort((a, b) => b.score - a.score);
+
+    // Renderizar Top 5
+    const top5 = data.slice(0, 5);
+    lbList.innerHTML = top5.map((item, idx) => `
+        <li class="${item.isPlayer ? 'is-player' : ''}">
+            ${idx === 0 ? '👑 ' : ''}${item.name}: ${item.score}
+        </li>
+    `).join('');
+}
+
+function setBotDiameter(b, d) {
+    b.diameter        = d;
+    b.el.style.width  = d + 'px';
+    b.el.style.height = d + 'px';
+}
+
+function updateBots() {
+    const W = cuadrado.offsetWidth, H = cuadrado.offsetHeight;
+    const now = Date.now();
+    const snapshotBots = bots.slice();
+
+    for (const b of snapshotBots) {
+        if (!bots.includes(b)) continue;
+
+        // Boost decelerado
+        b.vx = (b.vx || 0) * FRICCION;
+        b.vy = (b.vy || 0) * FRICCION;
+
+        // --- IA: elegir objetivo ---
+        let tx = b.tx, ty = b.ty;
+        let bestDist = Infinity;
+        let mode = 'wander';
+
+        // Amenaza cercana (entidad con más puntuación que nosotros, excluyendo células del mismo bot)
+        let fleeX = 0, fleeY = 0, hasThreat = false;
+        const checkThreat = (ex, ey, eScore) => {
+            if (eScore > b.cellScore) {
+                const d = Math.sqrt((ex-b.x)**2 + (ey-b.y)**2);
+                if (d < 280) { fleeX += b.x - ex; fleeY += b.y - ey; hasThreat = true; }
+            }
+        };
+        for (const c of celulas) checkThreat(c.x, c.y, c.cellScore);
+        for (const ob of bots) {
+            if (ob.botId !== b.botId) checkThreat(ob.x, ob.y, ob.cellScore);
+        }
+
+        if (hasThreat) {
+            mode = 'flee';
+            const fd = Math.sqrt(fleeX*fleeX + fleeY*fleeY) || 1;
+            tx = b.x + (fleeX / fd) * 200;
+            ty = b.y + (fleeY / fd) * 200;
+        } else {
+            // Presa más cercana (entidad con menor puntuación que nosotros)
+            const checkPrey = (ex, ey, eScore) => {
+                if (b.cellScore > eScore) {
+                    const d = Math.sqrt((ex-b.x)**2 + (ey-b.y)**2);
+                    if (d < bestDist) { bestDist = d; tx = ex; ty = ey; mode = 'chase'; }
+                }
+            };
+            for (const c of celulas) checkPrey(c.x, c.y, c.cellScore);
+            for (const ob of bots) {
+                if (ob.botId !== b.botId) checkPrey(ob.x, ob.y, ob.cellScore);
+            }
+
+            // Comida cercana (si no hay presa)
+            if (mode === 'wander') {
+                bestDist = 350;
+                for (const p of puntos) {
+                    const d = Math.sqrt((p.x-b.x)**2 + (p.y-b.y)**2);
+                    if (d < bestDist) { bestDist = d; tx = p.x; ty = p.y; mode = 'food'; }
+                }
+            }
+
+            // Deambular si no hay nada
+            if (mode === 'wander') {
+                b.wanderTimer--;
+                if (b.wanderTimer <= 0) {
+                    b.tx = Math.random() * (W - 80) + 40;
+                    b.ty = Math.random() * (H - 80) + 40;
+                    b.wanderTimer = 120 + Math.floor(Math.random() * 180);
+                }
+                tx = b.tx; ty = b.ty;
+            }
+        }
+
+        // --- DIVISIÓN INTELIGENTE ("con cabeza para comer a alguien más pequeño") ---
+        const myPieces = bots.filter(cell => cell.botId === b.botId).length;
+        if (b.cellScore >= 20 && now >= (b.splitCooldown || 0) && !hasThreat && myPieces < 2) {
+            const splitScore = Math.floor(b.cellScore / 2);
+            let bestTarget = null;
+            let bestTargetDist = Infinity;
+
+            // 1. Evaluar si conviene dividirse para comer una célula del jugador
+            for (const c of celulas) {
+                if (splitScore > c.cellScore) {
+                    const d = Math.hypot(c.x - b.x, c.y - b.y);
+                    const minD = (b.diameter + c.diameter) / 2 + 15;
+                    const maxD = Math.min(270, b.diameter + 180);
+                    if (d >= minD && d <= maxD && d < bestTargetDist) {
+                        // Verificar que no haya peligro en el punto de impacto
+                        let danger = false;
+                        for (const oc of celulas) {
+                            if (oc.cellScore > splitScore && Math.hypot(oc.x - c.x, oc.y - c.y) < 220) {
+                                danger = true; break;
+                            }
+                        }
+                        if (!danger) {
+                            for (const ob of bots) {
+                                if (ob.botId !== b.botId && ob.cellScore > splitScore && Math.hypot(ob.x - c.x, ob.y - c.y) < 220) {
+                                    danger = true; break;
+                                }
+                            }
+                        }
+                        if (!danger) {
+                            bestTarget = c;
+                            bestTargetDist = d;
+                        }
+                    }
+                }
+            }
+
+            // 2. Evaluar si conviene dividirse para comer a otro bot más pequeño
+            for (const ob of bots) {
+                if (ob.botId !== b.botId && splitScore > ob.cellScore) {
+                    const d = Math.hypot(ob.x - b.x, ob.y - b.y);
+                    const minD = (b.diameter + ob.diameter) / 2 + 15;
+                    const maxD = Math.min(270, b.diameter + 180);
+                    if (d >= minD && d <= maxD && d < bestTargetDist) {
+                        let danger = false;
+                        for (const oc of celulas) {
+                            if (oc.cellScore > splitScore && Math.hypot(oc.x - ob.x, oc.y - ob.y) < 220) {
+                                danger = true; break;
+                            }
+                        }
+                        if (!danger) {
+                            for (const oob of bots) {
+                                if (oob.botId !== b.botId && oob.cellScore > splitScore && Math.hypot(oob.x - ob.x, oob.y - ob.y) < 220) {
+                                    danger = true; break;
+                                }
+                            }
+                        }
+                        if (!danger) {
+                            bestTarget = ob;
+                            bestTargetDist = d;
+                        }
+                    }
+                }
+            }
+
+            // Si hay un blanco seguro y viable para comer dividiéndose:
+            if (bestTarget) {
+                const ddx = bestTarget.x - b.x;
+                const ddy = bestTarget.y - b.y;
+                const ddist = Math.hypot(ddx, ddy) || 1;
+                const dirX = ddx / ddist;
+                const dirY = ddy / ddist;
+
+                const nuevoDiam = b.diameter / Math.SQRT2;
+                const mitadScore = Math.floor(b.cellScore / 2);
+                b.cellScore = mitadScore;
+                b.numEl.textContent = b.cellScore;
+                setBotDiameter(b, nuevoDiam);
+
+                const canMergeAt = now + MERGE_COOLDOWN;
+                b.mergeAt = canMergeAt;
+                b.splitCooldown = now + 7000;
+
+                const nueva = crearBot(b.x, b.y, nuevoDiam, mitadScore, b.color, b.botId);
+                nueva.vx = dirX * BOOST_SPEED;
+                nueva.vy = dirY * BOOST_SPEED;
+                nueva.mergeAt = canMergeAt;
+                nueva.splitCooldown = now + 7000;
+                nueva.tx = bestTarget.x;
+                nueva.ty = bestTarget.y;
+
+                bots.push(nueva);
+            }
+        }
+
+        // --- Mover hacia objetivo ---
+        const dx = tx - b.x, dy = ty - b.y;
+        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+        if (dist > BOT_SPEED) {
+            b.x += (dx / dist) * BOT_SPEED;
+            b.y += (dy / dist) * BOT_SPEED;
+        } else {
+            b.x = tx;
+            b.y = ty;
+        }
+
+        // Aplicar boost
+        b.x += b.vx;
+        b.y += b.vy;
+
+        // Mantener dentro del mapa
+        const r = b.diameter / 2;
+        b.x = Math.max(BARRA + r, Math.min(b.x, W - BARRA - r));
+        b.y = Math.max(BARRA + r, Math.min(b.y, H - BARRA - r));
+
+        b.el.style.left = b.x + 'px';
+        b.el.style.top  = b.y + 'px';
+    }
+}
+
+function checkComidasBots() {
+    // 1. Bot come comida
+    for (const b of bots) {
+        const r = b.diameter / 2;
+        for (let i = puntos.length - 1; i >= 0; i--) {
+            const p = puntos[i];
+            if (Math.sqrt((b.x-p.x)**2 + (b.y-p.y)**2) < r + p.r + 2) {
+                p.el.style.transition = 'transform 0.15s, opacity 0.15s';
+                p.el.style.transform  = 'translate(-50%,-50%) scale(2)';
+                p.el.style.opacity    = '0';
+                const ref = p.el;
+                setTimeout(() => ref.remove(), 150);
+                puntos.splice(i, 1);
+                if (b.cellScore < MAX_PUNTOS) {
+                    b.cellScore++;
+                    b.numEl.textContent = b.cellScore;
+                    setBotDiameter(b, b.diameter + 0.4);
+                }
+                puntos.push(crearPunto());
+            }
+        }
+    }
+
+    // 2. Bot come célula del jugador
+    for (const b of bots) {
+        for (let i = celulas.length - 1; i >= 0; i--) {
+            const c = celulas[i];
+            if (b.cellScore <= c.cellScore) continue;
+            const dist = Math.sqrt((b.x-c.x)**2 + (b.y-c.y)**2);
+            if (dist < b.diameter / 2) {
+                b.cellScore = Math.min(MAX_PUNTOS, b.cellScore + c.cellScore);
+                b.numEl.textContent = b.cellScore;
+                setBotDiameter(b, Math.sqrt(b.diameter**2 + c.diameter**2));
+                c.el.remove();
+                celulas.splice(i, 1);
+
+                // Si te comen todas las células, reapareces en cualquier lado
+                if (celulas.length === 0) {
+                    respawnJugador();
+                }
+            }
+        }
+    }
+
+    // 3. Célula del jugador come bot
+    for (const c of celulas) {
+        for (let i = bots.length - 1; i >= 0; i--) {
+            const b = bots[i];
+            if (c.cellScore <= b.cellScore) continue;
+            const dist = Math.sqrt((c.x-b.x)**2 + (c.y-b.y)**2);
+            if (dist < c.diameter / 2) {
+                c.cellScore = Math.min(MAX_PUNTOS, c.cellScore + b.cellScore);
+                updateCellScore(c);
+                setCelulaDiameter(c, Math.sqrt(c.diameter**2 + b.diameter**2));
+                b.el.remove();
+                bots.splice(i, 1);
+                checkBotRespawn();
+            }
+        }
+    }
+
+    // 4. Bot grande come bot pequeño
+    for (let i = 0; i < bots.length; i++) {
+        for (let j = bots.length - 1; j >= 0; j--) {
+            if (i === j || i >= bots.length || j >= bots.length) continue;
+            const a = bots[i], b = bots[j];
+            if (a.botId === b.botId) continue; // No comerse a sí mismo
+            if (a.cellScore <= b.cellScore) continue;
+            const dist = Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2);
+            if (dist < a.diameter / 2) {
+                a.cellScore = Math.min(MAX_PUNTOS, a.cellScore + b.cellScore);
+                a.numEl.textContent = a.cellScore;
+                setBotDiameter(a, Math.sqrt(a.diameter**2 + b.diameter**2));
+                b.el.remove();
+                bots.splice(j, 1);
+                if (j < i) i--; // ajustar índice tras splice
+                checkBotRespawn();
             }
         }
     }

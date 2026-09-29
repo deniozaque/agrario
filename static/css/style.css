@@ -1,0 +1,73 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #1a1a1a;
+    overflow: hidden; /* Ocultamos las barras de desplazamiento */
+}
+
+#cuadrado {
+    position: relative;
+    width: 3000px; 
+    height: 3000px;
+    background-color: white;
+    margin: 50px auto; 
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    cursor: crosshair;
+    overflow: hidden;
+}
+
+#circulo {
+    position: absolute;
+    width: 22px;
+    height: 22px;
+    background-color: #ff4757;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    box-shadow: 0 0 8px rgba(255, 71, 87, 0.6);
+}
+
+.punto {
+    position: absolute;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+/* ---- Minimapa ---- */
+#minimapa {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    width: 200px;
+    height: 200px;
+    background-color: rgba(255, 255, 255, 0.15);
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-radius: 8px;
+    backdrop-filter: blur(6px);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    overflow: hidden;
+    z-index: 1000;
+}
+
+/* Rectángulo que indica la zona visible de la pantalla */
+#minimapa-viewport {
+    position: absolute;
+    border: 2px solid rgba(255, 255, 255, 0.9);
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+    box-sizing: border-box;
+    transition: left 0.05s linear, top 0.05s linear;
+}
+
+/* Punto que representa el círculo rojo en el minimapa */
+#minimapa-circulo {
+    position: absolute;
+    width: 8px;
+    height: 8px;
+    background-color: #ff4757;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 6px #ff4757;
+}

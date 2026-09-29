@@ -16,15 +16,17 @@ body {
     overflow: hidden;
 }
 
-#circulo {
+#circulo, .celula {
     position: absolute;
-    width: 22px;
-    height: 22px;
     background-color: #ff4757;
     border-radius: 50%;
     transform: translate(-50%, -50%);
     pointer-events: none;
     box-shadow: 0 0 8px rgba(255, 71, 87, 0.6);
+    overflow: visible;
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .punto {
@@ -72,29 +74,16 @@ body {
     box-shadow: 0 0 6px #ff4757;
 }
 
-/* ---- Contador de bolas ---- */
-#contador {
-    position: fixed;
-    bottom: 28px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 30px;
-    padding: 10px 28px;
-    color: #fff;
+/* ---- Contador dentro de cada célula ---- */
+.cell-numero {
+    color: #000;
     font-family: 'Segoe UI', sans-serif;
-    font-size: 22px;
-    font-weight: 700;
-    letter-spacing: 2px;
+    font-size: 8px;
+    font-weight: 900;
+    white-space: nowrap;
     pointer-events: none;
-    z-index: 1000;
     user-select: none;
-}
-
-#contador-numero {
-    color: #ff4757;
+    line-height: 1;
 }
 
 /* ---- Barras negras en los bordes del mapa ---- */

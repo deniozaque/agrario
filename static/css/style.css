@@ -2,7 +2,7 @@ body {
     margin: 0;
     padding: 0;
     background-color: #1a1a1a;
-    overflow: hidden; /* Ocultamos las barras de desplazamiento */
+    overflow: hidden;
 }
 
 #cuadrado {
@@ -36,7 +36,6 @@ body {
     pointer-events: none;
 }
 
-/* ---- Minimapa ---- */
 #minimapa {
     position: fixed;
     top: 20px;
@@ -53,7 +52,6 @@ body {
     z-index: 1000;
 }
 
-/* Rectángulo que indica la zona visible de la pantalla */
 #minimapa-viewport {
     position: absolute;
     border: 2px solid rgba(255, 255, 255, 0.9);
@@ -63,7 +61,6 @@ body {
     transition: left 0.05s linear, top 0.05s linear;
 }
 
-/* Punto que representa el círculo rojo en el minimapa */
 #minimapa-circulo {
     position: absolute;
     width: 8px;
@@ -74,7 +71,6 @@ body {
     box-shadow: 0 0 6px #ff4757;
 }
 
-/* ---- Contador dentro de cada célula ---- */
 .cell-numero {
     color: #000;
     font-family: 'Segoe UI', sans-serif;
@@ -86,7 +82,6 @@ body {
     line-height: 1;
 }
 
-/* ---- Barras negras en los bordes del mapa ---- */
 .barra {
     position: absolute;
     background-color: #000;
@@ -114,7 +109,6 @@ body {
     width: 40px;
 }
 
-/* ---- Leaderboard / Clasificación ---- */
 #leaderboard {
     position: fixed;
     top: 20px;
@@ -157,4 +151,3 @@ body {
     color: #ff4757;
     font-weight: 800;
 }
-

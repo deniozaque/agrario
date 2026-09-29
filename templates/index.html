@@ -10,14 +10,22 @@
 <body>
     <div id="cuadrado">
         <div id="circulo"></div>
+        <!-- Barras negras en los bordes del mapa -->
+        <div class="barra barra-top"></div>
+        <div class="barra barra-bottom"></div>
+        <div class="barra barra-left"></div>
+        <div class="barra barra-right"></div>
     </div>
 
     <!-- Minimapa fijo en la esquina superior derecha -->
     <div id="minimapa">
-        <!-- Representa la zona visible de la pantalla -->
         <div id="minimapa-viewport"></div>
-        <!-- Representa el círculo rojo en el minimapa -->
         <div id="minimapa-circulo"></div>
+    </div>
+
+    <!-- Contador de bolas comidas -->
+    <div id="contador">
+        🔴 <span id="contador-numero">0</span>
     </div>
 
     <!-- Ruta adaptada para la carpeta static/js -->

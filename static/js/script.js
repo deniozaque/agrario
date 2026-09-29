@@ -3,6 +3,9 @@ const circulo = document.getElementById('circulo');
 const minimapa = document.getElementById('minimapa');
 const miniViewport = document.getElementById('minimapa-viewport');
 const miniCirculo = document.getElementById('minimapa-circulo');
+const contadorEl = document.getElementById('contador-numero');
+
+let score = 0;
 
 let targetX = 1500;
 let targetY = 1500;
@@ -15,37 +18,45 @@ let mouseClientY = window.innerHeight / 2;
 let scrollVelX = 0;
 let scrollVelY = 0;
 
+const TOTAL_PUNTOS = 1500;
+
 // Paleta de colores vivos para los puntos
 const COLORES = [
     '#ff4757', '#ff6b81', '#ffa502', '#eccc68',
     '#2ed573', '#1e90ff', '#5352ed', '#ff6348',
     '#70a1ff', '#7bed9f', '#ff4500', '#00d2d3',
+    '#ff9f43', '#ee5a24', '#0652DD', '#9980FA',
+    '#833471', '#006266', '#F9CA24', '#6ab04c',
 ];
 
-function generarPuntos(cantidad = 400) {
-    const fragment = document.createDocumentFragment();
+// Array con datos de cada punto para colisiones sin leer el DOM
+const puntos = [];
+
+function crearPunto() {
+    const el = document.createElement('div');
+    el.classList.add('punto');
+
+    const size = Math.random() * 3 + 2;
+    const color = COLORES[Math.floor(Math.random() * COLORES.length)];
+    const x = Math.random() * (cuadrado.offsetWidth  - 80) + 40;
+    const y = Math.random() * (cuadrado.offsetHeight - 80) + 40;
+
+    el.style.width  = `${size}px`;
+    el.style.height = `${size}px`;
+    el.style.backgroundColor = color;
+    el.style.left = `${x}px`;
+    el.style.top  = `${y}px`;
+    el.style.opacity = (Math.random() * 0.5 + 0.5).toFixed(2);
+
+    cuadrado.appendChild(el);
+
+    return { el, x, y, r: size / 2 };
+}
+
+function generarPuntos(cantidad) {
     for (let i = 0; i < cantidad; i++) {
-        const punto = document.createElement('div');
-        punto.classList.add('punto');
-
-        // Tamaño muy pequeño: entre 2 y 5 píxeles
-        const size = Math.random() * 3 + 2;
-        // Color aleatorio de la paleta
-        const color = COLORES[Math.floor(Math.random() * COLORES.length)];
-        // Posición aleatoria dentro del cuadrado
-        const x = Math.random() * cuadrado.offsetWidth;
-        const y = Math.random() * cuadrado.offsetHeight;
-
-        punto.style.width  = `${size}px`;
-        punto.style.height = `${size}px`;
-        punto.style.backgroundColor = color;
-        punto.style.left = `${x}px`;
-        punto.style.top  = `${y}px`;
-        punto.style.opacity = (Math.random() * 0.5 + 0.5).toFixed(2); // entre 0.5 y 1
-
-        fragment.appendChild(punto);
+        puntos.push(crearPunto());
     }
-    cuadrado.appendChild(fragment);
 }
 
 window.onload = () => {
@@ -60,8 +71,7 @@ window.onload = () => {
     currentX = targetX;
     currentY = targetY;
 
-    // Generamos los puntos aleatorios al cargar
-    generarPuntos(400);
+    generarPuntos(TOTAL_PUNTOS);
 };
 
 document.addEventListener('mousemove', (e) => {
@@ -74,11 +84,43 @@ function calcScrollTarget(mousePos, viewportSize) {
     const relativo = mousePos / viewportSize;
 
     if (relativo < zonaInterna) {
-        return -20 * (1 - relativo / zonaInterna);
+        return -7 * (1 - relativo / zonaInterna);
     } else if (relativo > (1 - zonaInterna)) {
-        return 20 * ((relativo - (1 - zonaInterna)) / zonaInterna);
+        return 7 * ((relativo - (1 - zonaInterna)) / zonaInterna);
     }
     return 0;
+}
+
+function checkColisiones() {
+    const radioCirculo = circulo.offsetWidth / 2;
+    // Recorremos en reversa para poder hacer splice sin saltar índices
+    for (let i = puntos.length - 1; i >= 0; i--) {
+        const p = puntos[i];
+        const dx = currentX - p.x;
+        const dy = currentY - p.y;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        if (dist < radioCirculo + p.r + 2) {
+            // Animación de desaparición suave
+            p.el.style.transition = 'transform 0.15s ease, opacity 0.15s ease';
+            p.el.style.transform = 'translate(-50%, -50%) scale(2)';
+            p.el.style.opacity = '0';
+
+            // Eliminamos el elemento del DOM tras la animación
+            const elRef = p.el;
+            setTimeout(() => elRef.remove(), 150);
+
+            // Lo quitamos del array
+            puntos.splice(i, 1);
+
+            // Incrementamos el contador
+            score++;
+            contadorEl.textContent = score;
+
+            // Creamos uno nuevo en otro sitio
+            puntos.push(crearPunto());
+        }
+    }
 }
 
 function updateMinimapa() {
@@ -87,21 +129,16 @@ function updateMinimapa() {
     const miniW = minimapa.offsetWidth;
     const miniH = minimapa.offsetHeight;
 
-    // Escala: cuánto representa cada píxel del minimapa en el mundo real
     const scaleX = miniW / mapaW;
     const scaleY = miniH / mapaH;
 
-    // --- Viewport rectangle ---
-    // Posición del scroll actual
     const scrollLeft = window.scrollX || window.pageXOffset;
     const scrollTop  = window.scrollY || window.pageYOffset;
 
-    // El cuadrado tiene margen de 50px arriba y a los lados (centrado con margin: auto)
     const cuadradoRect = cuadrado.getBoundingClientRect();
-    const cuadradoLeft = cuadradoRect.left + scrollLeft; // offset real del cuadrado en la página
+    const cuadradoLeft = cuadradoRect.left + scrollLeft;
     const cuadradoTop  = cuadradoRect.top  + scrollTop;
 
-    // Posición del viewport relativa al cuadrado
     const vpRelX = scrollLeft - cuadradoLeft;
     const vpRelY = scrollTop  - cuadradoTop;
 
@@ -110,7 +147,6 @@ function updateMinimapa() {
     miniViewport.style.width  = `${window.innerWidth  * scaleX}px`;
     miniViewport.style.height = `${window.innerHeight * scaleY}px`;
 
-    // --- Punto del círculo ---
     miniCirculo.style.left = `${currentX * scaleX}px`;
     miniCirculo.style.top  = `${currentY * scaleY}px`;
 }
@@ -132,7 +168,7 @@ function animate() {
     targetX = mouseClientX - rect.left;
     targetY = mouseClientY - rect.top;
 
-    const velocidadCirculo = 0.08;
+    const velocidadCirculo = 0.03;
     currentX += (targetX - currentX) * velocidadCirculo;
     currentY += (targetY - currentY) * velocidadCirculo;
 
@@ -145,7 +181,10 @@ function animate() {
     circulo.style.left = `${currentX}px`;
     circulo.style.top  = `${currentY}px`;
 
-    // --- 3. Actualizar minimapa ---
+    // --- 3. Colisiones con puntos ---
+    checkColisiones();
+
+    // --- 4. Actualizar minimapa ---
     updateMinimapa();
 
     requestAnimationFrame(animate);
